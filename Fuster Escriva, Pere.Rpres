@@ -1,0 +1,322 @@
+<style>
+body {
+    overflow: scroll;
+}
+</style>
+
+
+Monthly traffic across the Peace Bridge 
+========================================================
+author: Pere Fuster Escriva
+date: 6th March 2021
+autosize: true
+font-import: https://fonts.googleapis.com/css2?family=Roboto&display=swap
+font-family: Roboto
+
+Subject: Data Tidying and Reporting 
+
+MSc in Statistics for Data Science, UC3M
+
+Objectives
+========================================================
+incremental: true
+transition:fade
+
+&nbsp;
+
+- To understand the traffics in the 
+- Aid decision makers in evaluating actions 
+
+&nbsp;
+
+&nbsp;
+
+
+## Methodology
+
+- Visualisation 
+- Arima modelling and Autoregressive Neural Networks for Forecasting 
+
+
+Dataset 
+========================================================
+incremental: true
+transition: none
+
+The dataset utilised for the study consists on the monthly ammount of accidents (in thousands)
+
+```{r, echo=FALSE}
+
+library(Stat2Data)
+library(tidyverse)
+library(dygraphs)
+library(xts)
+library(ggpubr)
+library(webshot)
+library(DT)
+
+data(PeaceBridge2003)
+#str(PeaceBridge2003)
+
+PeaceBridge2003$Date = seq(as.Date("2003/01/01"), as.Date("2015/12/01"), "months")
+
+data = PeaceBridge2003 %>%
+  group_by(Year, Month) %>%
+  summarise(Traffic = sum(Traffic))
+
+dt = datatable(data, class = 'cell-border stripe', editable = 'cell', filter = 'top')
+
+htmlwidgets::saveWidget(dt,'dt2.html')
+```
+
+<style>
+  .p_iframe iframe {
+    width:100%;
+    height:500px;
+}
+</style>
+
+<div class="p_iframe">
+<iframe frameborder="0" seamless='seamless' scrolling=yes src="dt2.html"></iframe>
+</div>
+
+
+Evolution Over time
+========================================================
+incremental: true
+transition: none
+type:exclaim
+
+&nbsp;
+
+Data has been collected for over a decade, where: 
+
+- Slow decrease in traffic accidents over time
+- Strong Seasonality, pointing at a higher number of traffic accidents on summer.  
+
+
+```{r, echo=FALSE}
+
+data(PeaceBridge2003)
+#str(PeaceBridge2003)
+
+library(Stat2Data)
+library(tidyverse)
+library(dygraphs)
+library(xts)
+library(ggpubr)
+library(webshot)
+library(DT)
+
+PeaceBridge2003$Date = base::seq(as.Date("2003/01/01"), as.Date("2015/12/01"), "months")
+
+series = xts(x = PeaceBridge2003$Traffic, order.by = PeaceBridge2003$Dat)
+
+g = dygraph(series, main = "Traffics Accidents on the Bridge") %>%
+  dyHighlight(highlightSeriesOpts = list(strokeWidth = 3)) %>% 
+  dyRangeSelector() %>% 
+  dyRoller(rollPeriod = 1)
+
+
+htmlwidgets::saveWidget(g, 'ts.html')
+
+```
+
+<style>
+  .p_iframe iframe {
+    width:100%;
+    height:400px;
+}
+</style>
+
+<div class="p_iframe">
+<iframe frameborder="0" seamless='seamless' scrolling=no src="ts.html"></iframe>
+</div>
+
+
+
+Further Evaluation of The series 
+========================================================
+incremental: true
+transition: none
+type:exclaim
+
+&nbsp;
+
+- Seasonality is clear
+- Lag 1 appears to be carrying most of the information to predict the next step
+
+&nbsp;
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, fig.width = 25}
+
+# The series is non stationary in mean
+
+# HIDDEN: adf.test(series$Performance)
+
+# Visually is no stationary in variance either but we will not be building confidence intervals
+
+Tm = length(PeaceBridge2003$Traffic)
+spm.acf = acf(PeaceBridge2003$Traffic, lag.max=35, plot=FALSE)
+spm.acf = data.frame(lag = 35:0, acf = spm.acf$acf)
+
+a = ggplot(spm.acf, aes(lag, acf)) + 
+  geom_bar(stat="identity", fill="aquamarine4") + 
+  geom_hline(yintercept =  1.96 * Tm^(-0.5), color="blue4", linetype="dashed") + 
+  geom_hline(yintercept = -1.96 * Tm^(-0.5), color="blue4", linetype="dashed") +
+  theme_classic() + geom_hline(yintercept = 0, color="blue4") + 
+    labs(title="ACF - Correlogram") + ylab("")
+
+
+spm.pacf = pacf(PeaceBridge2003$Traffic, lag.max = 35, plot = FALSE)
+spm.pacf = data.frame(lag= 1:35, pacf = spm.pacf$acf) # Reminder: k is PACF is defined for positive lags
+
+b = ggplot(spm.pacf, aes(lag, pacf)) + 
+  geom_bar(stat="identity", fill="aquamarine4") + 
+  geom_hline(yintercept =  1.96 * Tm^(-0.5), color="blue4", linetype="dashed") + 
+  geom_hline(yintercept = -1.96 * Tm^(-0.5), color="blue4", linetype="dashed") +
+  theme_classic() + geom_hline(yintercept = 0, color="blue4") + 
+    labs(title="PACF - Partial Correlogram",
+       caption="Pere Fuster - UC3M") + ylab("")
+
+
+X = ggarrange(a, b, ncol = 1,  common.legend = TRUE)
+annotate_figure(X,
+               top = text_grob("Visualisation of lags' Linear Association", color = "black", face = "bold", size = 14))
+
+# auto.arima(series$Performance)
+
+```
+
+Accidents by Month 
+========================================================
+incremental: true
+transition: none
+
+In the following scatter plot we can see the relationship beteween the age of the horse and his price. 
+
+```{r, echo=FALSE}
+
+library(plotly)
+
+months = PeaceBridge2003 %>%
+  group_by(Month) %>%
+  summarise(mean = mean(Traffic), 
+            se = sqrt(var(Traffic)),
+            dev = mean - qnorm(0.10, mean, se))
+
+#months$Month = ordered(as.factor(months$Month), levels=c("January", "February", "March", "April","May","June", "July", "August", "September", "October", "November", "December"))
+
+data = data.frame(months$mean, months$dev, months$Month)
+
+fig = plot_ly(data = data, x = ~months.Month, y = ~months.mean, type = 'bar',
+        error_y = ~list(array = months.dev,
+                        color = '#000000'), 
+        marker = list(color = 'rgb(158,202,225)',
+                      line = list(color = 'rgb(8,48,107)',
+                                  width = 1.5))) %>% layout(
+    title = 'Traffic Accidents by Month',
+    font = t,
+    xaxis = list(
+      type = 'category',
+      title = 'Month'
+    ),
+    yaxis = list(
+      title = 'Number of Acccidents (In Thousands)',
+      range = c(0,1000)
+    )
+  )
+
+
+htmlwidgets::saveWidget(fig, 'fig12.html')
+
+```
+
+<style>
+  .p_iframe iframe {
+    width:100%;
+    height:500px;
+}
+</style>
+
+<div class="p_iframe">
+<iframe frameborder="0" seamless='seamless' scrolling=no src="fig12.html"></iframe>
+</div>
+
+
+Forecast 1: ARIMA Modelling
+========================================================
+incremental: true
+transition: none
+
+```{r, echo=FALSE}
+
+library(xts)
+library(forecast)
+
+model = auto.arima(PeaceBridge2003$Traffic, D=12)
+forecast = forecast(model, h = 12)
+
+t16 = xts(x = as.numeric(forecast$mean)[1:12], order.by = seq(as.Date("2016-01-01"), as.Date("2016-12-01"), by = 'month'))
+up = xts(x = as.numeric(forecast$upper)[1:12], order.by = seq(as.Date("2016-01-01"), as.Date("2016-12-01"), by = 'month'))
+low = xts(x = as.numeric(forecast$lower)[1:12], order.by = seq(as.Date("2016-01-01"), as.Date("2016-12-01"), by = 'month'))
+
+results = cbind(t16, up, low)
+
+dt = dygraph(results, main = "Forecasted Traffic Accidents for 2016") %>%
+  dyAxis("x", drawGrid = FALSE) %>%
+  dySeries(c("low", "t16", "up"), label = "Deaths") %>%
+  dyOptions(colors = RColorBrewer::brewer.pal(3, "Set1"))
+
+htmlwidgets::saveWidget(dt,'dt3.html')
+```
+
+<style>
+  .p_iframe iframe {
+    width:100%;
+    height:500px;
+}
+</style>
+
+<div class="p_iframe">
+<iframe frameborder="0" seamless='seamless' scrolling=yes src="dt3.html"></iframe>
+</div>
+
+Forecast 2: Auto-regressive Neural Network 
+========================================================
+incremental: true
+transition: none
+
+
+```{r, echo=FALSE}
+
+library(xts)
+library(forecast)
+
+model = nnetar(PeaceBridge2003$Traffic, D=12)
+forecast = forecast(model, PI=TRUE, h = 12)
+
+t16 = xts(x = as.numeric(forecast$mean)[1:12], order.by = seq(as.Date("2016-01-01"), as.Date("2016-12-01"), by = 'month'))
+up = xts(x = as.numeric(forecast$upper)[1:12], order.by = seq(as.Date("2016-01-01"), as.Date("2016-12-01"), by = 'month'))
+low = xts(x = as.numeric(forecast$lower)[1:12], order.by = seq(as.Date("2016-01-01"), as.Date("2016-12-01"), by = 'month'))
+
+results = cbind(t16, up, low)
+
+dt = dygraph(results, main = "Forecasted Traffic Accidents for 2016") %>%
+  dyAxis("x", drawGrid = FALSE) %>%
+  dySeries(c("low", "t16", "up"), label = "Deaths")
+
+htmlwidgets::saveWidget(dt,'dt4.html')
+```
+
+<style>
+  .p_iframe iframe {
+    width:100%;
+    height:500px;
+}
+</style>
+
+<div class="p_iframe">
+<iframe frameborder="0" seamless='seamless' scrolling=yes src="dt4.html"></iframe>
+</div>
+
